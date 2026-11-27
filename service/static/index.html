@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESMFold · FuriosaAI RNGD 추론 서비스</title>
+<style>
+:root {
+  --bg: #f4f5f7; --card: #fff; --ink: #111827; --muted: #6b7280; --line: #e5e7eb;
+  --accent: #4f46e5; --ok: #16a34a; --err: #dc2626; --npu: #7c3aed;
+  --vh: #0053d6; --conf: #65cbf3; --low: #ffdb13; --vlow: #ff7d45;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; background: #0f172a; color: #fff; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+.brand p { margin: 0; color: #94a3b8; font-size: 13px; }
+.logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, #7c3aed, #0ea5e9);
+  display: grid; place-items: center; font-weight: 800; font-size: 17px; }
+.pill { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #1e293b; font-size: 13px; white-space: nowrap; }
+.pill .dot { width: 9px; height: 9px; border-radius: 50%; background: #64748b; }
+.pill.ready .dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25); }
+.pill.busy .dot { background: #f59e0b; animation: pulse 1.2s ease-in-out infinite; }
+.pill.error .dot { background: #ef4444; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+main { display: grid; grid-template-columns: minmax(330px, 430px) minmax(0, 1fr); gap: 16px; padding: 16px 24px; max-width: 1500px; margin: 0 auto; }
+@media (max-width: 920px) { main { grid-template-columns: minmax(0, 1fr); padding: 12px 16px; } header { padding: 12px 16px; flex-wrap: wrap; } }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.card h2 { font-size: 14px; margin: 0 0 10px; font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card h2 small { font-weight: 400; color: var(--muted); }
+.step { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #eef2ff; color: var(--accent); font-size: 12px; font-weight: 700; }
+textarea { width: 100%; min-height: 92px; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 8px;
+  font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.04em; }
+textarea:focus { outline: 2px solid #c7d2fe; border-color: #a5b4fc; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.count { font-variant-numeric: tabular-nums; }
+.count.over { color: var(--err); font-weight: 600; }
+.examples { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
+.chip { border: 1px solid var(--line); background: #f9fafb; border-radius: 999px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; color: #374151; }
+.chip:hover { border-color: #a5b4fc; background: #eef2ff; }
+.chip small { color: var(--muted); }
+button.primary { width: 100%; padding: 11px; border: 0; border-radius: 9px; background: var(--accent); color: #fff; font-size: 15px; font-weight: 650; cursor: pointer; }
+button.primary:hover:not(:disabled) { background: #4338ca; }
+button.primary:disabled { background: #a5b4fc; cursor: not-allowed; }
+.msg { margin-top: 10px; padding: 9px 11px; border-radius: 8px; font-size: 13px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.stages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.stages li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 5px; align-items: center; }
+.stages .ic { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #d1d5db; position: relative; }
+.stages li.active .ic { border-color: var(--accent); border-top-color: transparent; animation: spin 0.8s linear infinite; }
+.stages li.done .ic { border-color: var(--ok); background: var(--ok); }
+.stages li.done .ic::after { content: ""; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.stages b { font-weight: 600; }
+.stages .sub { display: block; color: var(--muted); font-size: 12px; }
+.tag { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 5px; margin-left: 6px; vertical-align: 1px; }
+.tag.npu { background: #f3e8ff; color: #6b21a8; }
+.tag.cpu { background: #e0f2fe; color: #075985; }
+.bar { grid-column: 2 / 4; height: 6px; background: #f1f5f9; border-radius: 99px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.25s; }
+.val { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+.elapsed { margin-top: 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.metric { background: #f9fafb; border: 1px solid var(--line); border-radius: 9px; padding: 8px 9px; min-width: 0; }
+.metric .k { font-size: 11.5px; color: var(--muted); }
+.metric .v { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.metric .v small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.seqtrack { display: flex; flex-wrap: wrap; gap: 2px; margin: 12px 0 2px; font: 12px ui-monospace, Menlo, Consolas, monospace; }
+.seqtrack span { width: 17px; text-align: center; border-radius: 3px; padding: 1px 0; }
+.timebar { display: flex; height: 12px; border-radius: 99px; overflow: hidden; margin-top: 12px; background: #f1f5f9; }
+.timebar span { height: 100%; }
+.tlegend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 12px; color: #374151; }
+.tlegend i, .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.placement { margin-top: 10px; font-size: 12.5px; color: #3b0764; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 8px 10px; }
+.npu-list { display: grid; gap: 8px; }
+.dev { border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; }
+.dev .top { display: flex; justify-content: space-between; gap: 8px; font-weight: 650; }
+.dev .top span { font-weight: 500; color: var(--muted); font-size: 12px; }
+.dev .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+.dev .grid b { display: block; color: var(--ink); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.membar { height: 5px; background: #f1f5f9; border-radius: 99px; margin-top: 7px; overflow: hidden; }
+.membar i { display: block; height: 100%; background: var(--npu); }
+.owner { margin-top: 6px; font-size: 12px; color: #4c1d95; }
+.owner b { font-weight: 650; }
+.meta { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.viewer-card { padding: 0; overflow: hidden; }
+.vhead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.vhead h2 { margin: 0; }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.tools select, .tools button, .btn { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 9px; font-size: 12.5px; cursor: pointer; color: #374151; }
+.tools button.on { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
+.tools button:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+#viewer { position: relative; width: 100%; height: 560px; background: #fff; }
+@media (max-width: 920px) { #viewer { height: 400px; } }
+.placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); text-align: center; padding: 24px; z-index: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 16px; border-top: 1px solid var(--line); font-size: 12px; color: #374151; }
+.legend b { font-weight: 600; }
+#chart svg { display: block; }
+.thead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.thead h2 { margin: 0; }
+.tabs { display: flex; gap: 4px; }
+.tabs button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; }
+.tabs button.on { background: #0f172a; color: #fff; border-color: #0f172a; }
+.twrap { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { padding: 5px 9px; text-align: right; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+th { position: sticky; top: 0; background: #f9fafb; color: #374151; font-weight: 600; }
+td.l, th.l { text-align: left; }
+.empty { padding: 24px; text-align: center; color: var(--muted); }
+footer { max-width: 1500px; margin: 0 auto; padding: 0 24px 24px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+code { font: 12px ui-monospace, Menlo, Consolas, monospace; background: #e9ebef; padding: 1px 5px; border-radius: 4px; word-break: break-all; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">⬡</div>
+    <div>
+      <h1>ESMFold on FuriosaAI RNGD</h1>
+      <p>단백질 아미노산 서열 → 3차원 구조 예측 추론 서비스</p>
+    </div>
+  </div>
+  <div class="pill" id="pill"><span class="dot"></span><span id="pill-text">서버 연결 중…</span></div>
+</header>
+
+<main>
+  <div class="col">
+    <section class="card">
+      <h2><span class="step">1</span>아미노산 서열 입력</h2>
+      <textarea id="seq" spellcheck="false" placeholder="예) NLYIQWLKDGGPSSGRPPPS&#10;(1글자 코드, FASTA 붙여넣기 가능)"></textarea>
+      <div class="row"><span>20종 표준 아미노산 + X · Ctrl+Enter 실행</span><span class="count" id="count">0 / 50 aa</span></div>
+      <div class="examples" id="examples"></div>
+      <button class="primary" id="run" disabled>구조 예측 실행</button>
+      <div id="msg"></div>
+    </section>
+
+    <section class="card" id="progress-card" hidden>
+      <h2><span class="step">2</span>추론 진행 <small id="job-id"></small></h2>
+      <ol class="stages">
+        <li id="st-backbone"><span class="ic"></span>
+          <div><b>ESM-2 3B 언어모델</b><span class="tag npu">RNGD NPU</span><span class="sub" id="backbone-sub">36 layers</span></div>
+          <span class="val" id="v-backbone"></span><div class="bar"><i id="b-backbone"></i></div></li>
+        <li id="st-fold"><span class="ic"></span>
+          <div><b>Folding trunk ⇄ Structure module</b><span class="tag cpu">CPU FP32</span>
+            <span class="sub" id="fold-sub">pass마다 trunk 48 blocks → structure module(IPA)로 3D 좌표 생성 · recycle</span></div>
+          <span class="val" id="v-fold"></span><div class="bar"><i id="b-fold"></i></div></li>
+        <li id="st-post"><span class="ic"></span>
+          <div><b>신뢰도 · PDB 생성</b><span class="sub">pLDDT · pTM · atom37 → PDB</span></div><span class="val"></span></li>
+      </ol>
+      <div class="elapsed" id="elapsed"></div>
+    </section>
+
+    <section class="card" id="result-card" hidden>
+      <h2><span class="step">3</span>예측 결과</h2>
+      <div class="metrics">
+        <div class="metric"><div class="k">평균 pLDDT</div><div class="v" id="m-plddt">–</div></div>
+        <div class="metric"><div class="k">pTM</div><div class="v" id="m-ptm">–</div></div>
+        <div class="metric"><div class="k">길이</div><div class="v" id="m-len">–</div></div>
+        <div class="metric"><div class="k">추론 시간</div><div class="v" id="m-time">–</div></div>
+      </div>
+      <div class="seqtrack" id="seqtrack"></div>
+      <div class="timebar" id="timebar"></div>
+      <div class="tlegend" id="tlegend"></div>
+      <div class="placement" id="placement"></div>
+    </section>
+
+    <section class="card">
+      <h2>RNGD NPU 상태 <small>furiosa-smi · 3초마다 갱신</small></h2>
+      <div class="npu-list" id="npu"><div class="empty">불러오는 중…</div></div>
+      <div class="meta" id="meta"></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card viewer-card">
+      <div class="vhead">
+        <h2>3D 구조 <small id="viewer-title"></small></h2>
+        <div class="tools">
+          <select id="style" title="표현 방식">
+            <option value="cartoon">Cartoon</option>
+            <option value="cartoon_stick">Cartoon + Stick</option>
+            <option value="stick">Stick</option>
+            <option value="sphere">Sphere</option>
+          </select>
+          <select id="color" title="색상">
+            <option value="plddt">색상: pLDDT</option>
+            <option value="rainbow">색상: N→C 무지개</option>
+            <option value="element">색상: 원소</option>
+          </select>
+          <button id="spin" type="button">자동 회전</button>
+          <button id="reset" type="button">시점 초기화</button>
+          <button id="png" type="button" disabled>PNG 저장</button>
+          <button id="pdb" type="button" disabled>PDB 다운로드</button>
+        </div>
+      </div>
+      <div id="viewer"><div class="placeholder" id="placeholder"><div>서열을 입력하고 <b>구조 예측 실행</b>을 누르면<br>예측된 3D 구조가 여기에 표시됩니다.<br><small>마우스: 드래그 회전 · 휠 확대 · 원자에 올리면 정보 표시</small></div></div></div>
+      <div class="legend"><b>pLDDT</b>
+        <span><i style="background:var(--vh)"></i>매우 높음 (&gt;90)</span>
+        <span><i style="background:var(--conf)"></i>높음 (70–90)</span>
+        <span><i style="background:var(--low)"></i>낮음 (50–70)</span>
+        <span><i style="background:var(--vlow)"></i>매우 낮음 (&lt;50)</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>잔기별 pLDDT <small>막대에 마우스를 올리면 잔기 정보</small></h2>
+      <div id="chart"><div class="empty">결과가 여기에 표시됩니다.</div></div>
+    </section>
+
+    <section class="card">
+      <div class="thead">
+        <h2>3차원 좌표 <small>Å · 예측 구조 (PDB와 동일)</small></h2>
+        <div class="tabs">
+          <button type="button" data-tab="ca" class="on">Cα 원자</button>
+          <button type="button" data-tab="all">전체 원자</button>
+          <button type="button" class="btn" id="csv" disabled>CSV 다운로드</button>
+        </div>
+      </div>
+      <div class="twrap"><table>
+        <thead><tr><th>#</th><th class="l">잔기</th><th>번호</th><th class="l">원자</th><th>X</th><th>Y</th><th>Z</th><th>pLDDT</th></tr></thead>
+        <tbody id="coords"><tr><td colspan="8" class="empty">결과가 여기에 표시됩니다.</td></tr></tbody>
+      </table></div>
+    </section>
+  </div>
+</main>
+
+<footer id="footer"></footer>
+
+<script src="/static/vendor/3Dmol-min.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const EXAMPLES = [
+  ["Chignolin", "GYDPETGTWG"],
+  ["Trp-cage", "NLYIQWLKDGGPSSGRPPPS"],
+  ["Melittin", "GIGAVLKVLTTGLPALISWIKRKRQQ"],
+  ["Insulin B", "FVNQHLCGSHLVEALYLVCGERGFFYTPKT"],
+  ["Villin HP35", "LSDEDFKAVFGMTRSAFANLPLWKQQNLKKEKGLF"],
+  ["Ubiquitin 1–50", "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQL"],
+];
+const STAGES = ["tokenize", "backbone", "trunk", "structure", "heads", "postprocess", "done"];
+const TIME_PARTS = [
+  ["language_model", "ESM-2 백본 (RNGD)", "#7c3aed"],
+  ["folding_trunk", "Folding trunk (CPU)", "#0ea5e9"],
+  ["structure_module", "Structure module (CPU)", "#10b981"],
+  ["other", "기타", "#9ca3af"],
+];
+let limits = { min: 3, max: 50 };
+let service = null, running = false, result = null, atoms = [], tab = "ca";
+let viewer = null, spinning = false;
+
+const plddtColor = (v) => (v >= 90 ? "#0053d6" : v >= 70 ? "#65cbf3" : v >= 50 ? "#ffdb13" : "#ff7d45");
+const plddtText = (v) => (v >= 90 ? "#0053d6" : v >= 70 ? "#0284c7" : v >= 50 ? "#a16207" : "#ea580c");
+const fmt = (n, d = 2) => Number(n).toFixed(d);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const cleanSeq = (text) => text.split(/\r?\n/).filter((l) => !l.trim().startsWith(">")).join("").replace(/\s+/g, "").toUpperCase();
+
+function showMsg(text) { $("msg").innerHTML = text ? `<div class="msg">${esc(text)}</div>` : ""; }
+
+function validate() {
+  const seq = cleanSeq($("seq").value);
+  const bad = [...new Set(seq.replace(/[ACDEFGHIKLMNPQRSTVWYX]/g, ""))];
+  let err = "";
+  if (bad.length) err = `허용되지 않는 문자: ${bad.join(" ")}`;
+  else if (seq.length > limits.max) err = `최대 ${limits.max} aa까지 입력할 수 있습니다.`;
+  else if (seq.length && seq.length < limits.min) err = `최소 ${limits.min} aa 이상 입력해 주세요.`;
+  $("count").textContent = `${seq.length} / ${limits.max} aa`;
+  $("count").classList.toggle("over", Boolean(err));
+  $("run").disabled = running || !seq.length || Boolean(err) || !service || service.state === "error";
+  $("run").textContent = running ? "추론 중…" : "구조 예측 실행";
+  return { seq, err };
+}
+
+async function run() {
+  const { seq, err } = validate();
+  if (!seq || err) { showMsg(err); return; }
+  running = true; validate(); showMsg("");
+  try {
+    const response = await fetch("/api/fold", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sequence: seq }) });
+    const job = await response.json();
+    if (!response.ok) throw new Error(job.error || `HTTP ${response.status}`);
+    await poll(job.id);
+  } catch (e) {
+    showMsg(e.message);
+  } finally {
+    running = false; validate();
+  }
+}
+
+async function poll(id) {
+  $("progress-card").hidden = false;
+  $("job-id").textContent = `job ${id}`;
+  resetStages();
+  for (;;) {
+    const response = await fetch(`/api/jobs/${id}`);
+    const job = await response.json();
+    if (!response.ok) throw new Error(job.error || `HTTP ${response.status}`);
+    if (job.state === "error") throw new Error(job.error || "추론 실패");
+    if (job.state === "done") { finishStages(job.result); render(job.result, id); return; }
+    updateProgress(job);
+    await sleep(350);
+  }
+}
+
+function setStage(id, state) {
+  $(id).classList.toggle("active", state === "active");
+  $(id).classList.toggle("done", state === "done");
+}
+
+const STAGE_ROWS = ["st-backbone", "st-fold", "st-post"];
+
+function resetStages() {
+  for (const id of STAGE_ROWS) setStage(id, "");
+  for (const id of ["b-backbone", "b-fold"]) $(id).style.width = "0";
+  $("v-backbone").textContent = $("v-fold").textContent = $("elapsed").textContent = "";
+}
+
+function updateProgress(job) {
+  if (job.state === "queued") {
+    $("elapsed").textContent = job.service_state && job.service_state !== "ready"
+      ? "서버 준비(NPU 워밍업) 중 — 준비되면 바로 실행됩니다."
+      : `대기 중 · 앞선 작업 ${job.queue_ahead}개`;
+    return;
+  }
+  const p = job.progress;
+  if (job.state !== "running" || !p) return;
+  // tokenize 0 · backbone 1 · trunk 2 · structure 3 (trunk/structure alternate per pass) · heads 4 · postprocess 5
+  const k = STAGES.indexOf(p.stage);
+  const bbTotal = p.backbone_total || 36, trTotal = p.trunk_total || 192, passes = p.passes || 4;
+  const bb = k > 1 ? bbTotal : p.backbone || 0;
+  const tr = k > 3 ? trTotal : Math.min(p.trunk || 0, trTotal);
+  const pass = Math.min(Math.max(Math.ceil((p.trunk || 0) / (trTotal / passes)), 1), passes);
+  $("b-backbone").style.width = `${(bb / bbTotal) * 100}%`;
+  $("v-backbone").textContent = `${bb}/${bbTotal}`;
+  $("b-fold").style.width = `${(tr / trTotal) * 100}%`;
+  $("v-fold").textContent = k < 2 ? "" : k > 3 ? `${passes}/${passes} pass`
+    : `pass ${pass}/${passes} · ${p.stage === "structure" ? "structure" : "trunk"}`;
+  setStage("st-backbone", k <= 1 ? "active" : "done");
+  setStage("st-fold", k < 2 ? "" : k <= 3 ? "active" : "done");
+  setStage("st-post", k < 4 ? "" : "active");
+  $("elapsed").textContent = `경과 ${fmt(job.elapsed, 1)} s`;
+}
+
+function finishStages(res) {
+  for (const id of STAGE_ROWS) setStage(id, "done");
+  for (const id of ["b-backbone", "b-fold"]) $(id).style.width = "100%";
+  $("v-backbone").textContent = `${res.backbone_layers_on_npu}/36`;
+  $("v-fold").textContent = `${res.recycles + 1}/${res.recycles + 1} pass`;
+  $("elapsed").textContent = `완료 · 추론 ${fmt(res.timings.total, 2)} s`;
+}
+
+function parsePDB(pdb) {
+  return pdb.split("\n").filter((l) => l.startsWith("ATOM") || l.startsWith("HETATM")).map((l) => ({
+    name: l.slice(12, 16).trim(), resn: l.slice(17, 20).trim(), chain: l.slice(21, 22).trim(), resi: Number(l.slice(22, 26)),
+    x: Number(l.slice(30, 38)), y: Number(l.slice(38, 46)), z: Number(l.slice(46, 54)), b: Number(l.slice(60, 66)), el: l.slice(76, 78).trim(),
+  }));
+}
+
+function render(res, id) {
+  result = Object.assign({ id }, res);
+  atoms = parsePDB(res.pdb);
+  $("result-card").hidden = false;
+  $("m-plddt").innerHTML = `<span style="color:${plddtText(res.mean_plddt)}">${fmt(res.mean_plddt, 1)}</span>`;
+  $("m-ptm").textContent = fmt(res.ptm, 3);
+  $("m-len").innerHTML = `${res.length}<small> aa</small>`;
+  $("m-time").innerHTML = `${fmt(res.timings.total, 2)}<small> s</small>`;
+  $("seqtrack").innerHTML = [...res.sequence].map((aa, i) => {
+    const v = res.plddt[i];
+    return `<span title="${i + 1} ${aa} · pLDDT ${fmt(v, 1)}" style="background:${plddtColor(v)};color:${v >= 90 ? "#fff" : "#111"}">${aa}</span>`;
+  }).join("");
+  const t = res.timings;
+  const sum = TIME_PARTS.reduce((acc, [key]) => acc + (t[key] || 0), 0) || 1;
+  $("timebar").innerHTML = TIME_PARTS.map(([key, label, color]) =>
+    `<span style="width:${((t[key] || 0) / sum) * 100}%;background:${color}" title="${label} ${fmt(t[key] || 0, 2)} s"></span>`).join("");
+  $("tlegend").innerHTML = TIME_PARTS.map(([key, label, color]) => `<span><i style="background:${color}"></i>${label} ${fmt(t[key] || 0, 2)} s</span>`).join("");
+  const placement = Object.entries(res.npu_placement || {}).map(([dev, layers]) => `<b>${esc(dev)}</b> ${esc(layers)}`).join(" · ");
+  $("placement").innerHTML = res.mode === "rngd-hybrid"
+    ? `RNGD 실행 확인: ESM-2 백본 ${res.backbone_layers_on_npu}/36 layers (${placement}) · 이번 요청 NPU 블록 호출 ${res.npu_block_calls}회 · recycles ${res.recycles}`
+    : "CPU 모드로 실행됨 (NPU 미사용)";
+  $("viewer-title").textContent = `${res.length} aa · 평균 pLDDT ${fmt(res.mean_plddt, 1)}`;
+  drawViewer();
+  drawChart();
+  drawTable();
+  for (const btn of ["png", "pdb", "csv"]) $(btn).disabled = false;
+}
+
+function colorSpec() {
+  const mode = $("color").value;
+  if (mode === "plddt") return { colorfunc: (atom) => plddtColor(atom.b) };
+  if (mode === "rainbow") return { colorscheme: { prop: "resi", gradient: "roygb", min: result.length, max: 1 } };
+  return { colorscheme: "Jmol" };
+}
+
+function applyStyle() {
+  if (!viewer || !result) return;
+  const c = colorSpec();
+  const spec = {
+    cartoon: { cartoon: { ...c } },
+    cartoon_stick: { cartoon: { ...c, opacity: 0.85 }, stick: { radius: 0.14, ...c } },
+    stick: { stick: { radius: 0.2, ...c } },
+    sphere: { sphere: { scale: 0.32, ...c } },
+  }[$("style").value];
+  viewer.setStyle({}, spec);
+  viewer.render();
+}
+
+function drawViewer() {
+  try {
+    if (!viewer) viewer = $3Dmol.createViewer($("viewer"), { backgroundColor: "white", antialias: true });
+  } catch (e) {
+    showMsg(`3D 뷰어를 시작할 수 없습니다 (WebGL 필요): ${e.message}`);
+    return;
+  }
+  $("placeholder").hidden = true;
+  viewer.clear();
+  viewer.addModel(result.pdb, "pdb");
+  applyStyle();
+  viewer.setHoverable({}, true,
+    (atom, v) => {
+      if (!atom.label) {
+        atom.label = v.addLabel(`${atom.resn} ${atom.resi} · ${atom.atom} · pLDDT ${atom.b.toFixed(1)}`,
+          { position: atom, backgroundColor: "#0f172a", backgroundOpacity: 0.85, fontColor: "#fff", fontSize: 12, borderThickness: 0 });
+      }
+    },
+    (atom, v) => { if (atom.label) { v.removeLabel(atom.label); delete atom.label; } });
+  viewer.zoomTo();
+  viewer.render();
+  viewer.spin(spinning ? "y" : false, 0.6);
+}
+
+function drawChart() {
+  if (!result) return;
+  const values = result.plddt, n = values.length;
+  const W = Math.max($("chart").clientWidth, 280), H = 150, left = 28, bottom = 20, top = 8;
+  const plotH = H - top - bottom, bw = (W - left - 4) / n;
+  const y = (v) => top + ((100 - v) / 100) * plotH;
+  let svg = `<svg width="${W}" height="${H}" role="img" aria-label="per-residue pLDDT">`;
+  for (const g of [50, 70, 90]) {
+    svg += `<line x1="${left}" x2="${W}" y1="${y(g)}" y2="${y(g)}" stroke="#e5e7eb" stroke-dasharray="3 3"/>`;
+    svg += `<text x="${left - 5}" y="${y(g) + 4}" font-size="10" text-anchor="end" fill="#6b7280">${g}</text>`;
+  }
+  values.forEach((v, i) => {
+    const x = left + i * bw;
+    svg += `<rect x="${x + 0.5}" y="${y(v)}" width="${Math.max(bw - 1, 1)}" height="${H - bottom - y(v)}" fill="${plddtColor(v)}">` +
+      `<title>${i + 1} ${result.sequence[i]} · pLDDT ${v.toFixed(1)}</title></rect>`;
+    if (n <= 25 || i === 0 || (i + 1) % 5 === 0) {
+      svg += `<text x="${x + bw / 2}" y="${H - 6}" font-size="10" text-anchor="middle" fill="#6b7280">${i + 1}</text>`;
+    }
+  });
+  svg += `<line x1="${left}" x2="${W}" y1="${H - bottom}" y2="${H - bottom}" stroke="#9ca3af"/></svg>`;
+  $("chart").innerHTML = svg;
+}
+
+const tableRows = () => (tab === "ca" ? atoms.filter((a) => a.name === "CA") : atoms);
+
+function drawTable() {
+  $("coords").innerHTML = tableRows().map((a, i) =>
+    `<tr><td>${i + 1}</td><td class="l">${a.resn}</td><td>${a.resi}</td><td class="l">${a.name}</td>` +
+    `<td>${a.x.toFixed(3)}</td><td>${a.y.toFixed(3)}</td><td>${a.z.toFixed(3)}</td>` +
+    `<td style="color:${plddtText(a.b)}">${a.b.toFixed(1)}</td></tr>`).join("");
+}
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const fileStem = () => `esmfold_rngd_${result.sequence.slice(0, 12)}`;
+
+// furiosa-smi reports strings such as "27.58°C" / "36.00 W"; round them so the card cell fits.
+function unit(text, suffix) {
+  const value = parseFloat(String(text ?? "").replace(/[^\d.+-]/g, ""));
+  return Number.isFinite(value) ? `${Math.round(value)}${suffix}` : "–";
+}
+
+function renderNPU(npu) {
+  if (!npu || !npu.devices || !npu.devices.length) {
+    $("npu").innerHTML = `<div class="empty">${esc((npu && npu.error) || "NPU 정보 없음")}</div>`;
+    return;
+  }
+  $("npu").innerHTML = npu.devices.map((d) => {
+    // furiosa-smi does not count furiosa-torch allocations; fall back to what this service placed.
+    const used = d.mem_used_gib > 0 ? d.mem_used_gib : d.resident_gib || 0;
+    const owner = d.owned_by_service
+      ? `<b>이 서비스</b>가 점유${d.layers ? ` · ESM-2 layers ${esc(d.layers)} 상주` : ""}`
+      : d.occupied ? `다른 프로세스 점유 ` : "미사용";
+    return `
+    <div class="dev">
+      <div class="top">${esc(d.name)} <span>RNGD · ${esc(d.liveness)}</span></div>
+      <div class="grid">
+        <div>${d.mem_used_gib > 0 ? "DRAM 사용" : "상주 가중치"}<b>${fmt(used, 1)} / ${fmt(d.mem_total_gib, 1)} GiB</b></div>
+        <div>PE 점유<b>${d.pe_occupied} / ${d.pe_total}</b></div>
+        <div>PE 사용률<b>${fmt(d.pe_util, 1)} %</b></div>
+        <div>온도 · 전력<b>${unit(d.temperature, "°C")} · ${unit(d.power, " W")}</b></div>
+      </div>
+      <div class="membar"><i style="width:${(used / d.mem_total_gib) * 100}%"></i></div>
+      <div class="owner">${owner}</div>
+    </div>`;
+  }).join("");
+}
+
+function duration(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return h ? `${h}시간 ${m}분` : `${m}분 ${Math.floor(sec % 60)}초`;
+}
+
+async function refreshStatus() {
+  try {
+    const response = await fetch("/api/status");
+    service = await response.json();
+    limits = { min: service.min_len, max: service.max_len };
+    const label = {
+      ready: service.mode === "cpu" ? "준비 완료 (CPU 모드)" : `RNGD 준비 완료 · ${service.devices.join(", ")}`,
+      warming: "NPU 워밍업 중 (컴파일 캐시 로딩)…",
+      loading: "모델 로딩 중…",
+      error: "서비스 오류",
+    }[service.state] || service.state;
+    $("pill").className = `pill ${service.state === "ready" ? "ready" : service.state === "error" ? "error" : "busy"}`;
+    $("pill-text").textContent = label;
+    if (service.state === "error" && !running) showMsg(service.error);
+    renderNPU(service.npu);
+    $("meta").innerHTML = [
+      `모델 <b>${esc(service.model)}</b>${service.parameters_b ? ` (${service.parameters_b}B)` : ""} · 모드 ${esc(service.mode)}`,
+      `입력 ${service.min_len}–${service.max_len} aa (모든 길이를 ${service.bucket_tokens}토큰 버킷 1개로 컴파일) · recycles ${service.recycles}`,
+      `처리 ${service.served}건 · 대기 ${service.waiting}건 · 가동 ${duration(service.uptime_seconds)}` +
+        (service.ready_seconds ? ` · 기동 ${fmt(service.ready_seconds, 1)} s` : ""),
+    ].join("<br>");
+  } catch (e) {
+    $("pill").className = "pill error";
+    $("pill-text").textContent = "서버 연결 끊김";
+  }
+  validate();
+}
+
+for (const [name, seq] of EXAMPLES) {
+  const chip = Object.assign(document.createElement("button"), { type: "button", className: "chip" });
+  chip.innerHTML = `${esc(name)} <small>${seq.length}</small>`;
+  chip.onclick = () => { $("seq").value = seq; showMsg(""); validate(); };
+  $("examples").appendChild(chip);
+}
+$("seq").value = EXAMPLES[1][1];
+$("seq").addEventListener("input", () => { showMsg(""); validate(); });
+$("seq").addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !$("run").disabled) run(); });
+$("run").onclick = run;
+$("style").onchange = applyStyle;
+$("color").onchange = applyStyle;
+$("spin").onclick = () => {
+  spinning = !spinning;
+  $("spin").classList.toggle("on", spinning);
+  if (viewer) viewer.spin(spinning ? "y" : false, 0.6);
+};
+$("reset").onclick = () => { if (viewer) { viewer.zoomTo(); viewer.render(); } };
+$("png").onclick = () => {
+  const a = Object.assign(document.createElement("a"), { href: viewer.pngURI(), download: `${fileStem()}.png` });
+  document.body.appendChild(a); a.click(); a.remove();
+};
+$("pdb").onclick = () => download(`${fileStem()}.pdb`, result.pdb, "chemical/x-pdb");
+$("csv").onclick = () => {
+  const lines = ["index,residue,residue_number,chain,atom,element,x,y,z,plddt",
+    ...tableRows().map((a, i) => [i + 1, a.resn, a.resi, a.chain, a.name, a.el, a.x.toFixed(3), a.y.toFixed(3), a.z.toFixed(3), a.b.toFixed(2)].join(","))];
+  download(`${fileStem()}_${tab}.csv`, `${lines.join("\n")}\n`, "text/csv");
+};
+for (const btn of document.querySelectorAll(".tabs button[data-tab]")) {
+  btn.onclick = () => {
+    tab = btn.dataset.tab;
+    for (const other of document.querySelectorAll(".tabs button[data-tab]")) other.classList.toggle("on", other === btn);
+    if (result) drawTable();
+  };
+}
+window.addEventListener("resize", () => { if (viewer) viewer.resize(); drawChart(); });
+$("footer").innerHTML = `facebook/esmfold_v1 · ESM-2 3B 백본은 FuriosaAI RNGD에서 실행 (torch.compile · furiosa backend · 8-PE fusion · 2 chips), ` +
+  `folding trunk·structure module은 CPU FP32 · 3D 뷰어 3Dmol.js<br>` +
+  `API: <code>curl -s -X POST ${location.origin}/api/fold -d '{"sequence":"GYDPETGTWG"}'</code> → <code>curl -s ${location.origin}/api/jobs/&lt;id&gt;</code> (결과: PDB · Cα 좌표 · pLDDT)`;
+refreshStatus();
+setInterval(refreshStatus, 3000);
+</script>
+</body>
+</html>
